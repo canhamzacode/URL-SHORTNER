@@ -1,4 +1,5 @@
 const Url = require("../models/Url");
+var validUrl = require("valid-url");
 const { StatusCodes } = require("http-status-codes");
 const {
   ConflictRequestError,
@@ -26,10 +27,40 @@ const shortenUrl = async (req, res) => {
     throw new BadRequestError("URL must be provided");
   }
 
-  let randomName = customName ? customName : generateRandomString(5);
-  let urlExists = true;
+  if (!validUrl.isUri(originalUrl)) {
+    throw new BadRequestError("Provided Url is not valid");
+  }
 
-  while (urlExists) {
+  let randomName = customName
+    ? customName.replace(/\s/g, "-")
+    : generateRandomString(5);
+
+  const check = await Url.findOne({ customName: randomName });
+
+  if (randomName.length < 5) {
+    throw new BadRequestError("Provided name is not valid");
+  } else if (check && customName) {
+    throw new ConflictRequestError("Provided name is not available");
+  }
+
+  const existingUrl = await Url.findOne({ originalUrl });
+  if (existingUrl) {
+    res.status(StatusCodes.OK).json({
+      message: "URL already exists",
+      data: existingUrl.shortenUrl,
+    });
+    return;
+  }
+
+  const existingCustomNameUrl = await Url.findOne({ customName: randomName });
+  if (existingCustomNameUrl) {
+    throw new ConflictRequestError("Custom name already exists");
+  }
+
+  let urlExists = true;
+  let i = 0;
+
+  while (urlExists && i < 10) {
     const check = await Url.findOne({ customName: randomName });
     urlExists = !!check;
 
@@ -42,14 +73,16 @@ const shortenUrl = async (req, res) => {
 
       res.status(StatusCodes.CREATED).json({
         message: "URL shortened successfully",
-        data: { url: { shortenUrl } },
+        data: url.shortenUrl,
       });
       break;
     }
 
     randomName = generateRandomString(5);
+    i++;
   }
 };
+
 const getAllUrl = async (req, res) => {
   const urls = await Url.find();
   res.status(StatusCodes.OK).json({ urls });
@@ -68,24 +101,40 @@ const updateUrl = async (req, res) => {
   const { id } = req.params;
   const { customName, originalUrl } = req.body;
 
-  let randomName = customName ? customName : generateRandomString(5);
+  const existingUrl = await Url.findOne({ _id: id });
+  if (!existingUrl) {
+    throw new NotFoundError(`No URL with ID ${id}`);
+  }
 
-  while (true) {
-    const check = await Url.findOne({ customName: randomName });
+  if (customName && customName.length < 5) {
+    throw new BadRequestError("Custom name must be at least 5 characters long");
+  }
 
-    if (!check) {
-      break;
-    } else {
-      randomName = generateRandomString(5);
+  if (customName) {
+    const existingCustomNameUrl = await Url.findOne({ customName: customName });
+    if (existingCustomNameUrl) {
+      throw new ConflictRequestError("Custom name already exists");
     }
   }
+
+  if (originalUrl && !validUrl.isUri(originalUrl)) {
+    throw new BadRequestError("Provided URL is not valid");
+  }
+
+  let randomName = customName
+    ? customName.replace(/\s/g, "-")
+    : existingUrl.customName;
+
   const data = {
     customName: randomName,
-    originalUrl,
+    originalUrl: originalUrl || existingUrl.originalUrl,
     shortenUrl: `https://short.ner/${randomName}`,
   };
-  const url = await Url.findOneAndUpdate({ _id: id }, data);
-  res.status(StatusCodes.OK).json({ message: "URL Updated Sucessfully", url });
+
+  const updatedUrl = await Url.findOneAndUpdate({ _id: id }, data);
+  res
+    .status(StatusCodes.OK)
+    .json({ message: "URL Updated Successfully", url: updatedUrl });
 };
 
 const deleteUrl = async (req, res) => {

@@ -4,7 +4,7 @@ const { StatusCodes } = require("http-status-codes");
 class ConflictRequestError extends CustomApiError {
   constructor(message) {
     super(message);
-    this.status = StatusCodes.CONFLICT;
+    this.statusCode = StatusCodes.CONFLICT;
   }
 }
 
