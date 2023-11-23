@@ -12,7 +12,7 @@ const connectDB = require("./db/connect");
 app.use(express.json());
 
 // routes
-app.use("/api/v1/", routes);
+app.use("/api/v1/urls", routes);
 
 // middlewares
 app.use(notFoundMiddleware);

@@ -47,7 +47,7 @@ const shortenUrl = async (req, res) => {
   if (existingUrl) {
     res.status(StatusCodes.OK).json({
       message: "URL already exists",
-      data: existingUrl.shortenUrl,
+      data: { shortUrl: existingUrl.shortenUrl },
     });
     return;
   }
@@ -73,7 +73,7 @@ const shortenUrl = async (req, res) => {
 
       res.status(StatusCodes.CREATED).json({
         message: "URL shortened successfully",
-        data: url.shortenUrl,
+        data: { shortUrl: url.shortenUrl },
       });
       break;
     }
@@ -85,12 +85,21 @@ const shortenUrl = async (req, res) => {
 
 const getAllUrl = async (req, res) => {
   const urls = await Url.find();
-  res.status(StatusCodes.OK).json({ urls });
+  const mappedUrls = urls.map(
+    ({ _id: id, originalUrl, shortenUrl, createdAt }) => ({
+      id,
+      originalUrl,
+      shortenUrl,
+      createdAt,
+    })
+  );
+
+  res.status(StatusCodes.OK).json({ urls: mappedUrls });
 };
 
 const getUrl = async (req, res) => {
   const { id } = req.params;
-  const url = await Url.find({ _id: id });
+  const url = await Url.findOne({ _id: id });
   if (!url) {
     throw new NotFoundError(`No URl with ${id}`);
   }
@@ -130,11 +139,21 @@ const updateUrl = async (req, res) => {
     originalUrl: originalUrl || existingUrl.originalUrl,
     shortenUrl: `https://short.ner/${randomName}`,
   };
+  await Url.updateOne({ _id: id }, data);
 
-  const updatedUrl = await Url.findOneAndUpdate({ _id: id }, data);
-  res
-    .status(StatusCodes.OK)
-    .json({ message: "URL Updated Successfully", url: updatedUrl });
+  const newUrl = await Url.findOne({ _id: id });
+
+  const successResponse = {
+    message: "Url updated successfully",
+    data: {
+      id: newUrl._id,
+      customName: newUrl.customName,
+      originalUrl: newUrl.originalUrl,
+      shortUrl: newUrl.shortenUrl,
+      createdAt: newUrl.createdAt.toISOString(),
+    },
+  };
+  res.status(StatusCodes.OK).json(successResponse);
 };
 
 const deleteUrl = async (req, res) => {
